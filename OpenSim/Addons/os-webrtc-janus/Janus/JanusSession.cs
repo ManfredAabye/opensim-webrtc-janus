@@ -552,21 +552,38 @@ namespace WebRtcVoice
                                     case "hangup":
                                         // The PeerConnection was closed, either by the user/application or by Janus itself;
                                         // If one is in the room, when a "hangup" event happens, it means that the user left the room.
-                                        m_log.DebugFormat("{0} EventLongPoll: hangup {1}", LogHeader, resp.ToString());
+                                        m_log.DebugFormat("{0} EventLongPoll: hangup session_id={1}, sender={2}, reason={3}, tx={4}",
+                                                        LogHeader,
+                                                        ExtractLogId(resp, "session_id"),
+                                                        ExtractLogId(resp, "sender"),
+                                                        resp.RawBody.TryGetString("reason", out string hangupReason) ? hangupReason : String.Empty,
+                                                        resp.TransactionId);
                                         OnHangup?.Invoke(eventResp);
                                         break;
                                     case "detached":
                                         // a plugin asked the core to detach one of our handles
-                                        m_log.DebugFormat("{0} EventLongPoll: event {1}", LogHeader, resp.ToString());
+                                        m_log.DebugFormat("{0} EventLongPoll: detached session_id={1}, sender={2}, tx={3}",
+                                                        LogHeader,
+                                                        ExtractLogId(resp, "session_id"),
+                                                        ExtractLogId(resp, "sender"),
+                                                        resp.TransactionId);
                                         OnDetached?.Invoke(eventResp);
                                         break;
                                     case "media":
                                         // Janus is receiving (receiving: true/false) audio/video (type: "audio/video") on this PeerConnection;
-                                        m_log.DebugFormat("{0} EventLongPoll: media {1}", LogHeader, resp.ToString());
+                                        m_log.DebugFormat("{0} EventLongPoll: media session_id={1}, sender={2}, tx={3}",
+                                                        LogHeader,
+                                                        ExtractLogId(resp, "session_id"),
+                                                        ExtractLogId(resp, "sender"),
+                                                        resp.TransactionId);
                                         break;
                                     case "slowlink":
                                         // Janus detected a slowlink (uplink: true/false) on this PeerConnection;
-                                        m_log.DebugFormat("{0} EventLongPoll: slowlink {1}", LogHeader, resp.ToString());
+                                        m_log.DebugFormat("{0} EventLongPoll: slowlink session_id={1}, sender={2}, tx={3}",
+                                                        LogHeader,
+                                                        ExtractLogId(resp, "session_id"),
+                                                        ExtractLogId(resp, "sender"),
+                                                        resp.TransactionId);
                                         break;
                                     case "error":
                                         m_log.DebugFormat("{0} EventLongPoll: error {1}", LogHeader, resp.ToString());
