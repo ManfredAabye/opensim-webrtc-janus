@@ -274,12 +274,10 @@ namespace WebRtcVoice
                     {
                         // Some messages are asynchronous and completed with an event
                         if (_MessageDetails) m_log.DebugFormat("{0} SendToJanus: ack response {1}", LogHeader, respStr);
-                        if (_OutstandingRequests.TryGetValue(pReq.TransactionId, out OutstandingRequest outstandingRequest))
-                        {
-                            ret = await outstandingRequest.TaskCompletionSource.Task;
-                            _OutstandingRequests.TryRemove(pReq.TransactionId, out _);
-                        }
-                        // If there is no OutstandingRequest, the request was not waiting for an event or already processed
+
+                        // Wait on the local TaskCompletionSource instead of re-reading the dictionary.
+                        // This avoids a race where the long-poll thread already removed the request.
+                        ret = await outReq.TaskCompletionSource.Task;
                     }
                     else 
                     {
@@ -297,6 +295,10 @@ namespace WebRtcVoice
             catch (Exception e)
             {
                 m_log.ErrorFormat("{0} SendToJanus: exception {1}", LogHeader, e.Message);
+                _OutstandingRequests.TryRemove(pReq.TransactionId, out _);
+            }
+            finally
+            {
                 _OutstandingRequests.TryRemove(pReq.TransactionId, out _);
             }
 
