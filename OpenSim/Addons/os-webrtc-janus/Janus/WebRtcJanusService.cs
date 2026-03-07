@@ -139,7 +139,7 @@ namespace WebRtcVoice
             if (await janusSession.CreateSession())
             {
                 _log.DebugFormat("{0} JanusSession created", LogHeader);
-                janusSession.OnDisconnect += Handle_Hangup;
+                janusSession.OnDisconnect += Handle_Disconnect;
 
                 // Once the session is created, create a handle to the plugin for rooms
                 JanusAudioBridge audioBridge = new JanusAudioBridge(janusSession);
@@ -183,13 +183,37 @@ namespace WebRtcVoice
                 }
                 if (VoiceViewerSession.TryGetViewerSessionByVSSessionId(sessionId, out IVoiceViewerSession viewerSession))
                 {
-                    // There is a viewer session associated with this session
-                    DisconnectViewerSession(viewerSession as JanusViewerSession, "hangup");
+                    // A Janus hangup can happen during a normal room switch/re-offer cycle.
+                    // Keep the viewer session alive and only clear the per-call state.
+                    if (viewerSession is JanusViewerSession janusViewerSession)
+                    {
+                        janusViewerSession.ParticipantId = 0;
+                        janusViewerSession.Answer = null;
+                        janusViewerSession.Offer = String.Empty;
+                        janusViewerSession.OfferOrig = String.Empty;
+                        janusViewerSession.Room = null;
+                    }
                 }
                 else
                 {
                     _log.DebugFormat("{0} Handle_Hangup: no session found. SessionId={1}", LogHeader, sessionId);
                 }
+            }
+        }
+
+        private void Handle_Disconnect(EventResp pResp)
+        {
+            if (pResp is null)
+                return;
+
+            string sessionId = pResp.sessionId;
+            if (VoiceViewerSession.TryGetViewerSessionByVSSessionId(sessionId, out IVoiceViewerSession viewerSession))
+            {
+                DisconnectViewerSession(viewerSession as JanusViewerSession, "disconnect");
+            }
+            else
+            {
+                _log.DebugFormat("{0} Handle_Disconnect: no session found. SessionId={1}", LogHeader, sessionId);
             }
         }
 
@@ -289,6 +313,7 @@ namespace WebRtcVoice
                             viewerSession.AgentId = pUserID;
                             if (await viewerSession.Room.JoinRoom(viewerSession))    
                             {
+                                viewerSession.RegionId = pSceneID;
                                 _log.InfoFormat("{0} ProvisionVoiceAccountRequest: connected. agent={1}, scene={2}, room={3}, participant={4}, viewer_session={5}",
                                         LogHeader, pUserID, pSceneID, viewerSession.Room.RoomId, viewerSession.ParticipantId, viewerSession.ViewerSessionID);
                                 ret = new OSDMap
