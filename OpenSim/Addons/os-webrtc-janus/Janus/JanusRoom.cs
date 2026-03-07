@@ -83,7 +83,7 @@ namespace WebRtcVoice
                 JanusMessageResp resp = await _AudioBridge.SendPluginMsg(joinReq);
                 AudioBridgeJoinRoomResp joinResp = new AudioBridgeJoinRoomResp(resp);
 
-                if (joinResp is not null && joinResp.AudioBridgeReturnCode == "joined")
+                if (joinResp is not null && joinResp.AudioBridgeReturnCode == "joined" && joinResp.ParticipantId > 0)
                 {
                     pVSession.ParticipantId = joinResp.ParticipantId;
                     pVSession.Answer = joinResp.Jsep;
@@ -103,7 +103,7 @@ namespace WebRtcVoice
                         JanusMessageResp retryResp = await _AudioBridge.SendPluginMsg(retryJoinReq);
                         AudioBridgeJoinRoomResp retryJoinResp = new AudioBridgeJoinRoomResp(retryResp);
 
-                        if (retryJoinResp is not null && retryJoinResp.AudioBridgeReturnCode == "joined")
+                        if (retryJoinResp is not null && retryJoinResp.AudioBridgeReturnCode == "joined" && retryJoinResp.ParticipantId > 0)
                         {
                             pVSession.ParticipantId = retryJoinResp.ParticipantId;
                             pVSession.Answer = retryJoinResp.Jsep;
@@ -125,6 +125,11 @@ namespace WebRtcVoice
                 }
                 else
                 {
+                    if (joinResp is not null && joinResp.AudioBridgeReturnCode == "joined" && joinResp.ParticipantId <= 0)
+                    {
+                        m_log.ErrorFormat("{0} JoinRoom. Joined response contains invalid participant id {1} for room {2}. Resp={3}",
+                                LogHeader, joinResp.ParticipantId, RoomId, joinResp.ToString());
+                    }
                     m_log.ErrorFormat("{0} JoinRoom. Failed to join room {1}. Resp={2}", LogHeader, RoomId, joinResp.ToString());
                 }
             }
@@ -174,7 +179,7 @@ namespace WebRtcVoice
                         if (!String.Equals(display, pDisplay, StringComparison.Ordinal))
                             continue;
 
-                        int participantId = participant.TryGetValue("id", out OSD idNode) ? idNode.AsInteger() : 0;
+                        long participantId = participant.TryGetValue("id", out OSD idNode) ? JanusMessage.OSDToLong(idNode) : 0L;
                         if (participantId <= 0)
                             continue;
 

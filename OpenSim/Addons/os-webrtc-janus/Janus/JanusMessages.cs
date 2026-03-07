@@ -476,6 +476,13 @@ namespace WebRtcVoice
                 return 0;
             return m_data.ContainsKey(pKey) ? (int)OSDToLong(m_data[pKey]) : 0;
         }
+        // Get a long value for a key in the response data or zero if not there
+        public long PluginRespDataLong(string pKey)
+        {
+            if (m_data is null)
+                return 0L;
+            return m_data.ContainsKey(pKey) ? OSDToLong(m_data[pKey]) : 0L;
+        }
         // Get a string value for a key in the response data or empty string if not there
         public string PluginRespDataString(string pKey)
         {
@@ -562,7 +569,7 @@ namespace WebRtcVoice
         public AudioBridgeJoinRoomResp(JanusMessageResp pResp) : base(pResp)
         {
         }
-        public int ParticipantId { get { return PluginRespDataInt("id"); } }
+        public long ParticipantId { get { return PluginRespDataLong("id"); } }
     }
     // ==============================================================
     public class AudioBridgeConfigRoomReq : PluginMsgReq
@@ -584,7 +591,7 @@ namespace WebRtcVoice
     // ==============================================================
     public class AudioBridgeLeaveRoomReq : PluginMsgReq
     {
-        public AudioBridgeLeaveRoomReq(int pRoomId, int pAttendeeId) : base(new OSDMap() {
+        public AudioBridgeLeaveRoomReq(int pRoomId, long pAttendeeId) : base(new OSDMap() {
                                                 { "request", "leave" },
                                                 { "room", pRoomId },
                                                 { "id", pAttendeeId }
