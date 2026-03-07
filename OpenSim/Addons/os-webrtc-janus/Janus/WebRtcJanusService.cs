@@ -507,6 +507,10 @@ namespace WebRtcVoice
                     "janus list sessions",
                     "List active Janus sessions (admin API)",
                     HandleJanusListSessions);
+                MainConsole.Instance.Commands.AddCommand("Webrtc", false, "janus list",
+                    "janus list",
+                    "List Janus rooms and sessions (shortcut for diagnostics)",
+                    HandleJanusList);
                 MainConsole.Instance.Commands.AddCommand("Webrtc", false, "janus room",
                     "janus room <roomId>",
                     "Show one room with participant details",
@@ -514,6 +518,13 @@ namespace WebRtcVoice
                 // List rooms
                 // List participants in a room
             }
+        }
+
+        private void HandleJanusList(string module, string[] cmdparms)
+        {
+            WriteOut("janus list: showing rooms then sessions");
+            HandleJanusListRooms(module, cmdparms);
+            HandleJanusListSessions(module, cmdparms);
         }
 
         private async void HandleJanusInfo(string module, string[] cmdparms)
