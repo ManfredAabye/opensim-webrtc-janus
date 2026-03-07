@@ -244,17 +244,38 @@ namespace WebRtcVoice
             return matches;
         }
 
+        private static object TryGetPropertyValue(object pSource, string pPropertyName)
+        {
+            if (pSource is null || String.IsNullOrEmpty(pPropertyName))
+                return null;
+
+            PropertyInfo propertyInfo = pSource.GetType().GetProperty(pPropertyName);
+            if (propertyInfo is null)
+                return null;
+
+            return propertyInfo.GetValue(pSource);
+        }
+
         private static bool IsViewerSessionReusable(IVoiceViewerSession pViewerSession)
         {
-            if (pViewerSession is JanusViewerSession janusViewerSession)
+            if (pViewerSession is null)
+                return false;
+
+            if (String.IsNullOrEmpty(pViewerSession.ViewerSessionID) || String.IsNullOrEmpty(pViewerSession.VoiceServiceSessionId))
+                return false;
+
+            object disconnectReason = TryGetPropertyValue(pViewerSession, "DisconnectReason");
+            if (disconnectReason is string reason && !String.IsNullOrEmpty(reason))
+                return false;
+
+            object sessionObj = TryGetPropertyValue(pViewerSession, "Session");
+            if (sessionObj is not null)
             {
-                bool connected = janusViewerSession.Session is not null && janusViewerSession.Session.IsConnected;
-                bool disconnecting = !String.IsNullOrEmpty(janusViewerSession.DisconnectReason);
-                bool hasBridge = janusViewerSession.AudioBridge is not null;
-                return connected && !disconnecting && hasBridge;
+                object isConnectedObj = TryGetPropertyValue(sessionObj, "IsConnected");
+                if (isConnectedObj is bool isConnected && !isConnected)
+                    return false;
             }
 
-            // For non-Janus implementations we keep legacy behavior and allow reuse.
             return true;
         }
 
