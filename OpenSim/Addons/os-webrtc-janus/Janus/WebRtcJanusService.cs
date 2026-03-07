@@ -26,6 +26,7 @@
  */
 
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 using System.Threading.Tasks;
 
@@ -660,8 +661,8 @@ namespace WebRtcVoice
                     {
                         MainConsole.Instance.Output("");
                         MainConsole.Instance.Output(
-                            "  {0,10} {1,15} {2,5} {3,10} {4,7} {5,7}",
-                            "Room", "Description", "Num", "SampleRate", "Spatial", "Recording");
+                            "  {0,10} {1,15} {2,5} {3,10} {4,7} {5,7} {6}",
+                            "Room", "Description", "Num", "SampleRate", "Spatial", "Recording", "MappedSession");
                         foreach (OSDMap room in list as OSDArray)
                         {
                             MainConsole.Instance.Output(
@@ -675,9 +676,14 @@ namespace WebRtcVoice
                                 {
                                     foreach (OSDMap participant in participants as OSDArray)
                                     {
-                                        MainConsole.Instance.Output("      {0}/{1},muted={2},talking={3},pos={4}",
-                                            participant["id"].AsLong(), participant["display"], participant["muted"],
-                                            participant["talking"], participant["spatial_position"]);
+                                        long participantId = participant.TryGetValue("id", out OSD participantIdNode)
+                                                ? JanusMessage.OSDToLong(participantIdNode)
+                                                : 0L;
+                                        string mapping = BuildParticipantMapping(participantId);
+                                        MainConsole.Instance.Output("      {0}/{1},muted={2},talking={3},pos={4} {5}",
+                                            participantId, participant["display"], participant["muted"],
+                                            participant["talking"], participant["spatial_position"],
+                                            String.IsNullOrEmpty(mapping) ? "mapped=<none>" : mapping.Substring(2));
                                     }
                                 }
                             }
@@ -736,7 +742,19 @@ namespace WebRtcVoice
             WriteOut("Active Janus sessions: {0}", sessions.Count);
             foreach (OSD session in sessions)
             {
-                WriteOut("  - {0}", session.AsString());
+                string janusSessionId = session.AsString();
+                if (VoiceViewerSession.TryGetViewerSessionByVSSessionId(janusSessionId, out IVoiceViewerSession viewerSession))
+                {
+                    WriteOut("  - {0}  viewer_session={1} agent={2} scene={3}",
+                            janusSessionId,
+                            viewerSession.ViewerSessionID,
+                            viewerSession.AgentId,
+                            viewerSession.RegionId);
+                }
+                else
+                {
+                    WriteOut("  - {0}", janusSessionId);
+                }
             }
         }
 
@@ -807,13 +825,40 @@ namespace WebRtcVoice
 
             foreach (OSDMap participant in participants)
             {
-                WriteOut("    - {0}/{1}, muted={2}, talking={3}, pos={4}",
-                    GetMapString(participant, "id"),
+                long participantId = participant.TryGetValue("id", out OSD participantIdNode)
+                        ? JanusMessage.OSDToLong(participantIdNode)
+                        : 0L;
+                string mapping = BuildParticipantMapping(participantId);
+                WriteOut("    - {0}/{1}, muted={2}, talking={3}, pos={4}{5}",
+                    participantId,
                     GetMapString(participant, "display"),
                     GetMapString(participant, "muted"),
                     GetMapString(participant, "talking"),
-                    GetMapString(participant, "spatial_position"));
+                    GetMapString(participant, "spatial_position"),
+                    mapping);
             }
+        }
+
+        private static string BuildParticipantMapping(long participantId)
+        {
+            if (participantId <= 0)
+                return "";
+
+            lock (VoiceViewerSession.ViewerSessions)
+            {
+                foreach (KeyValuePair<string, IVoiceViewerSession> entry in VoiceViewerSession.ViewerSessions)
+                {
+                    if (entry.Value is JanusViewerSession janusViewerSession && janusViewerSession.ParticipantId == participantId)
+                    {
+                        return String.Format(", viewer_session={0}, agent={1}, scene={2}",
+                                entry.Key,
+                                entry.Value.AgentId,
+                                entry.Value.RegionId);
+                    }
+                }
+            }
+
+            return "";
         }
 
         private void WriteOut(string msg, params object[] args)

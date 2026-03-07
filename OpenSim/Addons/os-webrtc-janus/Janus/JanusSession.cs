@@ -557,7 +557,7 @@ namespace WebRtcVoice
                                                         ExtractLogId(resp, "session_id"),
                                                         ExtractLogId(resp, "sender"),
                                                         resp.RawBody.TryGetString("reason", out string hangupReason) ? hangupReason : String.Empty,
-                                                        resp.TransactionId);
+                                                        FormatTransactionId(resp.TransactionId));
                                         OnHangup?.Invoke(eventResp);
                                         break;
                                     case "detached":
@@ -566,7 +566,7 @@ namespace WebRtcVoice
                                                         LogHeader,
                                                         ExtractLogId(resp, "session_id"),
                                                         ExtractLogId(resp, "sender"),
-                                                        resp.TransactionId);
+                                                        FormatTransactionId(resp.TransactionId));
                                         OnDetached?.Invoke(eventResp);
                                         break;
                                     case "media":
@@ -575,7 +575,7 @@ namespace WebRtcVoice
                                                         LogHeader,
                                                         ExtractLogId(resp, "session_id"),
                                                         ExtractLogId(resp, "sender"),
-                                                        resp.TransactionId);
+                                                        FormatTransactionId(resp.TransactionId));
                                         break;
                                     case "slowlink":
                                         // Janus detected a slowlink (uplink: true/false) on this PeerConnection;
@@ -583,7 +583,7 @@ namespace WebRtcVoice
                                                         LogHeader,
                                                         ExtractLogId(resp, "session_id"),
                                                         ExtractLogId(resp, "sender"),
-                                                        resp.TransactionId);
+                                                        FormatTransactionId(resp.TransactionId));
                                         break;
                                     case "error":
                                         m_log.DebugFormat("{0} EventLongPoll: error {1}", LogHeader, resp.ToString());
@@ -700,6 +700,11 @@ namespace WebRtcVoice
             {
                 return value.AsString();
             }
+        }
+
+        private static string FormatTransactionId(string transactionId)
+        {
+            return String.IsNullOrEmpty(transactionId) ? "<event>" : transactionId;
         }
     }
 }
