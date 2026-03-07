@@ -227,6 +227,86 @@ namespace WebRtcVoice
             }
             return false;
         }
+
+        private static List<KeyValuePair<string, IVoiceViewerSession>> GetViewerSessionsByAgentAndScene(UUID pAgentID, UUID pSceneID)
+        {
+            List<KeyValuePair<string, IVoiceViewerSession>> matches = new List<KeyValuePair<string, IVoiceViewerSession>>();
+            if (VoiceViewerSession.TryGetViewerSessionByAgentId(pAgentID, out IEnumerable<KeyValuePair<string, IVoiceViewerSession>> vSessions))
+            {
+                foreach (KeyValuePair<string, IVoiceViewerSession> v in vSessions)
+                {
+                    if (v.Value.RegionId == pSceneID)
+                    {
+                        matches.Add(v);
+                    }
+                }
+            }
+            return matches;
+        }
+
+        private static bool IsViewerSessionReusable(IVoiceViewerSession pViewerSession)
+        {
+            if (pViewerSession is JanusViewerSession janusViewerSession)
+            {
+                bool connected = janusViewerSession.Session is not null && janusViewerSession.Session.IsConnected;
+                bool disconnecting = !String.IsNullOrEmpty(janusViewerSession.DisconnectReason);
+                bool hasBridge = janusViewerSession.AudioBridge is not null;
+                return connected && !disconnecting && hasBridge;
+            }
+
+            // For non-Janus implementations we keep legacy behavior and allow reuse.
+            return true;
+        }
+
+        private void CleanupDuplicateSessions(UUID pAgentID, UUID pSceneID, string pKeepViewerSessionId)
+        {
+            List<KeyValuePair<string, IVoiceViewerSession>> candidates = GetViewerSessionsByAgentAndScene(pAgentID, pSceneID);
+            foreach (KeyValuePair<string, IVoiceViewerSession> candidate in candidates)
+            {
+                if (!String.IsNullOrEmpty(pKeepViewerSessionId) && candidate.Key == pKeepViewerSessionId)
+                    continue;
+
+                m_log.WarnFormat("{0} CleanupDuplicateSessions: removing stale viewer_session {1} for agent {2}, scene {3}",
+                        LogHeader, candidate.Key, pAgentID, pSceneID);
+                VoiceViewerSession.RemoveViewerSession(candidate.Key);
+
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await candidate.Value.Shutdown();
+                    }
+                    catch (Exception ex)
+                    {
+                        m_log.DebugFormat("{0} CleanupDuplicateSessions: shutdown failed for viewer_session {1}: {2}",
+                                LogHeader, candidate.Key, ex.Message);
+                    }
+                });
+            }
+        }
+
+        private bool TryGetReusableViewerSession(UUID pAgentID, UUID pSceneID, out IVoiceViewerSession pViewerSession)
+        {
+            pViewerSession = null;
+            List<KeyValuePair<string, IVoiceViewerSession>> sessions = GetViewerSessionsByAgentAndScene(pAgentID, pSceneID);
+            foreach (KeyValuePair<string, IVoiceViewerSession> candidate in sessions)
+            {
+                if (IsViewerSessionReusable(candidate.Value))
+                {
+                    pViewerSession = candidate.Value;
+                    CleanupDuplicateSessions(pAgentID, pSceneID, candidate.Key);
+                    return true;
+                }
+            }
+
+            if (sessions.Count > 0)
+            {
+                // No reusable session found: remove all stale sessions to force a clean create path.
+                CleanupDuplicateSessions(pAgentID, pSceneID, null);
+            }
+
+            return false;
+        }
         // =====================================================================
         // IWebRtcVoiceService
 
@@ -238,9 +318,13 @@ namespace WebRtcVoice
             if (pRequest.TryGetString("viewer_session", out string viewerSessionId))
             {
                 // request has a viewer session. Use that to find the voice service
-                if (!VoiceViewerSession.TryGetViewerSession(viewerSessionId, out vSession))
+                if (VoiceViewerSession.TryGetViewerSession(viewerSessionId, out vSession))
                 {
-                    if (TryGetViewerSessionByAgentAndScene(pUserID, pSceneID, out vSession))
+                    CleanupDuplicateSessions(pUserID, pSceneID, viewerSessionId);
+                }
+                else
+                {
+                    if (TryGetReusableViewerSession(pUserID, pSceneID, out vSession))
                     {
                         m_log.InfoFormat("{0} ProvisionVoiceAccountRequest: viewer session {1} not found, reconnect fallback reused {2}",
                                 LogHeader, viewerSessionId, vSession.ViewerSessionID);
@@ -256,13 +340,15 @@ namespace WebRtcVoice
                 // the request does not have a viewer session. See if it's an initial request
                 if (pRequest.TryGetString("channel_type", out string channelType))
                 {
-                    if (TryGetViewerSessionByAgentAndScene(pUserID, pSceneID, out vSession))
+                    if (TryGetReusableViewerSession(pUserID, pSceneID, out vSession))
                     {
                         m_log.InfoFormat("{0} ProvisionVoiceAccountRequest: reconnect reuse for agent {1}, scene {2}, viewer_session {3}",
                                 LogHeader, pUserID, pSceneID, vSession.ViewerSessionID);
                     }
                     else
                     {
+                        // Ensure stale sessions are cleared before creating a new one.
+                        CleanupDuplicateSessions(pUserID, pSceneID, null);
                         if (channelType == "local")
                         {
                             vSession = m_spatialVoiceService.CreateViewerSession(pRequest, pUserID, pSceneID);
@@ -277,7 +363,7 @@ namespace WebRtcVoice
                 }
                 else
                 {
-                    if (TryGetViewerSessionByAgentAndScene(pUserID, pSceneID, out vSession))
+                    if (TryGetReusableViewerSession(pUserID, pSceneID, out vSession))
                     {
                         m_log.InfoFormat("{0} ProvisionVoiceAccountRequest: missing channel_type, reused existing session for agent {1}, scene {2}, viewer_session {3}",
                                 LogHeader, pUserID, pSceneID, vSession.ViewerSessionID);
