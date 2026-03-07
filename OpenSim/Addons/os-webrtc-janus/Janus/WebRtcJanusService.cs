@@ -27,7 +27,9 @@
 
 using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Reflection;
+using System.Threading;
 using System.Threading.Tasks;
 
 using OpenSim.Framework;
@@ -58,6 +60,11 @@ namespace WebRtcVoice
         // Maximum ICE candidates accepted from one VoiceSignalingRequest call.
         // <= 0 means no limit.
         private int _MaxSignalingCandidatesPerRequest = 20;
+        // Delay between a disconnect and next join for same agent.
+        private int _RejoinCooldownMs = 250;
+
+        private readonly ConcurrentDictionary<UUID, DateTime> _LastDisconnectByAgent = new ConcurrentDictionary<UUID, DateTime>();
+        private long _VoiceFlowCounter;
 
         // An extra "viewer session" that is created initially. Used to verify the service
         //     is working and for a handle for the console commands.
@@ -85,12 +92,19 @@ namespace WebRtcVoice
                     // Debugging options
                     _MessageDetails = janusConfig.GetBoolean("MessageDetails", false);
                     _MaxSignalingCandidatesPerRequest = janusConfig.GetInt("MaxSignalingCandidatesPerRequest", 20);
+                    _RejoinCooldownMs = janusConfig.GetInt("RejoinCooldownMs", 250);
 
                     if (_MaxSignalingCandidatesPerRequest < 0)
                     {
                         _log.WarnFormat("{0} MaxSignalingCandidatesPerRequest < 0 ({1}), using 0 (unlimited)",
                                 LogHeader, _MaxSignalingCandidatesPerRequest);
                         _MaxSignalingCandidatesPerRequest = 0;
+                    }
+
+                    if (_RejoinCooldownMs < 0)
+                    {
+                        _log.WarnFormat("{0} RejoinCooldownMs < 0 ({1}), using 0", LogHeader, _RejoinCooldownMs);
+                        _RejoinCooldownMs = 0;
                     }
 
                     if (String.IsNullOrEmpty(_JanusServerURI) || String.IsNullOrEmpty(_JanusAPIToken) ||
@@ -218,6 +232,30 @@ namespace WebRtcVoice
             }
         }
 
+        private static string FlowTag(long pFlowId, JanusViewerSession pViewerSession)
+        {
+            string vs = pViewerSession?.ViewerSessionID ?? "<none>";
+            return String.Format("flow={0}, viewer_session={1}", pFlowId, vs);
+        }
+
+        private async Task EnforceRejoinCooldown(UUID pAgentId, JanusViewerSession pViewerSession, long pFlowId)
+        {
+            if (_RejoinCooldownMs <= 0)
+                return;
+
+            if (_LastDisconnectByAgent.TryGetValue(pAgentId, out DateTime lastDisconnectUtc))
+            {
+                int elapsedMs = (int)(DateTime.UtcNow - lastDisconnectUtc).TotalMilliseconds;
+                int waitMs = _RejoinCooldownMs - elapsedMs;
+                if (waitMs > 0)
+                {
+                    _log.DebugFormat("{0} ProvisionVoiceAccountRequest: applying rejoin cooldown {1}ms ({2})",
+                            LogHeader, waitMs, FlowTag(pFlowId, pViewerSession));
+                    await Task.Delay(waitMs);
+                }
+            }
+        }
+
         // Disconnect the viewer session. This is called when the viewer logs out or hangs up.
         private void DisconnectViewerSession(JanusViewerSession pViewerSession, string pReason)
         {
@@ -231,6 +269,7 @@ namespace WebRtcVoice
                 }
 
                 int roomId = pViewerSession.Room is not null ? pViewerSession.Room.RoomId : 0;
+                _LastDisconnectByAgent[pViewerSession.AgentId] = DateTime.UtcNow;
                 _log.InfoFormat("{0} ProvisionVoiceAccountRequest: disconnected by {1}. agent={2}, scene={3}, room={4}, participant={5}, viewer_session={6}",
                         LogHeader, pReason, pViewerSession.AgentId, pViewerSession.RegionId, roomId, pViewerSession.ParticipantId, pViewerSession.ViewerSessionID);
                 Task.Run(() =>
@@ -251,8 +290,10 @@ namespace WebRtcVoice
             OSDMap ret = null;
             string errorMsg = null;
             JanusViewerSession viewerSession = pSession as JanusViewerSession;
+            long flowId = Interlocked.Increment(ref _VoiceFlowCounter);
             if (viewerSession is not null)
             {
+                _log.DebugFormat("{0} ProvisionVoiceAccountRequest: begin ({1})", LogHeader, FlowTag(flowId, viewerSession));
                 if (viewerSession.Session is null)
                 {
                     // This is a new session so we must create a new session and handle to the audio bridge
@@ -310,6 +351,8 @@ namespace WebRtcVoice
                                 await previousRoom.LeaveRoom(viewerSession);
                                 viewerSession.ParticipantId = 0;
                             }
+
+                            await EnforceRejoinCooldown(pUserID, viewerSession, flowId);
 
                             viewerSession.Room = selectedRoom;
                             viewerSession.Offer = jsepSdp;
@@ -378,6 +421,11 @@ namespace WebRtcVoice
                     { "response", "failed" },
                     { "error", errorMsg }
                 };
+                _log.WarnFormat("{0} ProvisionVoiceAccountRequest: failed ({1}) error={2}", LogHeader, FlowTag(flowId, viewerSession), errorMsg);
+            }
+            else
+            {
+                _log.DebugFormat("{0} ProvisionVoiceAccountRequest: end ({1})", LogHeader, FlowTag(flowId, viewerSession));
             }
 
             return ret;
@@ -389,8 +437,10 @@ namespace WebRtcVoice
             OSDMap ret = null;
             JanusViewerSession viewerSession = pSession as JanusViewerSession;
             JanusMessageResp resp = null;
+            long flowId = Interlocked.Increment(ref _VoiceFlowCounter);
             if (viewerSession is not null)
             {
+                _log.DebugFormat("{0} VoiceSignalingRequest: begin ({1})", LogHeader, FlowTag(flowId, viewerSession));
                 // The request should be an array of candidates
                 if (pRequest.ContainsKey("candidate") && pRequest["candidate"] is OSDMap candidate)
                 {
@@ -459,6 +509,7 @@ namespace WebRtcVoice
             {
                 ret = resp.RawBody;
             }
+            _log.DebugFormat("{0} VoiceSignalingRequest: end ({1})", LogHeader, FlowTag(flowId, viewerSession));
             return ret;
         }
 
