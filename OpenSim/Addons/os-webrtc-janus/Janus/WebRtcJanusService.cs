@@ -283,6 +283,9 @@ namespace WebRtcVoice
 
                 if (pRequest.ContainsKey("jsep") && pRequest["jsep"] is OSDMap jsep)
                 {
+                    await viewerSession.ProvisionLock.WaitAsync();
+                    try
+                    {
                     // The jsep is the SDP from the client. This is the client's request to connect to the audio bridge.
                     string jsepType = jsep["type"].AsString();
                     string jsepSdp = jsep["sdp"].AsString();
@@ -313,14 +316,28 @@ namespace WebRtcVoice
                             viewerSession.AgentId = pUserID;
                             if (await viewerSession.Room.JoinRoom(viewerSession))    
                             {
-                                viewerSession.RegionId = pSceneID;
-                                _log.InfoFormat("{0} ProvisionVoiceAccountRequest: connected. agent={1}, scene={2}, room={3}, participant={4}, viewer_session={5}",
-                                        LogHeader, pUserID, pSceneID, viewerSession.Room.RoomId, viewerSession.ParticipantId, viewerSession.ViewerSessionID);
-                                ret = new OSDMap
+                                bool hasAnswerSdp =
+                                        viewerSession.Answer is not null &&
+                                        viewerSession.Answer.TryGetString("sdp", out string answerSdp) &&
+                                        !String.IsNullOrEmpty(answerSdp);
+
+                                if (!hasAnswerSdp)
                                 {
-                                    { "jsep", viewerSession.Answer },
-                                    { "viewer_session", viewerSession.ViewerSessionID }
-                                };
+                                    errorMsg = "JoinRoom without valid jsep/sdp";
+                                    _log.ErrorFormat("{0} ProvisionVoiceAccountRequest: JoinRoom returned without valid answer SDP. agent={1}, scene={2}, room={3}, participant={4}",
+                                            LogHeader, pUserID, pSceneID, viewerSession.Room.RoomId, viewerSession.ParticipantId);
+                                }
+                                else
+                                {
+                                    viewerSession.RegionId = pSceneID;
+                                    _log.InfoFormat("{0} ProvisionVoiceAccountRequest: connected. agent={1}, scene={2}, room={3}, participant={4}, viewer_session={5}",
+                                            LogHeader, pUserID, pSceneID, viewerSession.Room.RoomId, viewerSession.ParticipantId, viewerSession.ViewerSessionID);
+                                    ret = new OSDMap
+                                    {
+                                        { "jsep", viewerSession.Answer },
+                                        { "viewer_session", viewerSession.ViewerSessionID }
+                                    };
+                                }
                             }
                             else
                             {
@@ -333,6 +350,11 @@ namespace WebRtcVoice
                     {
                         errorMsg = "jsep type not offer";
                         _log.ErrorFormat("{0} ProvisionVoiceAccountRequest: jsep type={1} not offer", LogHeader, jsepType);
+                    }
+                    }
+                    finally
+                    {
+                        viewerSession.ProvisionLock.Release();
                     }
                 }
                 else
