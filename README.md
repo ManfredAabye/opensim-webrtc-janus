@@ -16,6 +16,24 @@ As of March 7, 2026 at 10:24 PM, no more crashes or errors have been detected.
 
 ---
 
+Description - March 14, 2026
+
+Treat "Janus plugin events" without a transaction as normal asynchronous flows instead of errors.
+
+Log events without a transaction only as debug (with _MessageDetails enabled).
+
+Log events with an existing but unknown transaction as a warning (instead of an error) so that genuine anomalies remain visible.
+
+Leave event processing unchanged (OnEvent is still called).
+
+Result
+
+No more misleading "event no outstanding request error" during normal "Janus reconnect/push event flows".
+
+Audio/signaling behavior remains functionally unchanged (verified).
+
+---
+
 ## os-webrtc-janus Delta Summary vs upstream opensim/opensim
 
 ## Scope
