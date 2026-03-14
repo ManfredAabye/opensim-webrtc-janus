@@ -10,13 +10,7 @@ Stand 07.03.2026 22:24 keinerlei abstürze oder Fehler mehr festzustellen.
 
 As of March 7, 2026 at 10:24 PM, no more crashes or errors have been detected.
 
----
-
-⚠️ This overview is AI-generated because I was unable to document the 230 working hours I invested.
-
----
-
-Description - March 14, 2026
+## Description - March 14, 2026
 
 Treat "Janus plugin events" without a transaction as normal asynchronous flows instead of errors.
 
@@ -47,6 +41,10 @@ Test voice on Region D
 Test voice while moving between Regions A -> B -> C -> D -> A ->
 
 Status: No problems detected.
+
+---
+
+⚠️ This overview is AI-generated because I was unable to document the 230 working hours I invested.
 
 ---
 
