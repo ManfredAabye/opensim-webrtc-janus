@@ -28,7 +28,7 @@ Audio/signaling behavior remains functionally unchanged (verified).
 
 .
 
-Test 4 regions combined as a cube.
+Test 4 regions combined as cubes in a grid.
 
 Test voice on Region A
 
