@@ -32,6 +32,22 @@ No more misleading "event no outstanding request error" during normal "Janus rec
 
 Audio/signaling behavior remains functionally unchanged (verified).
 
+.
+
+Test 4 regions combined as a cube.
+
+Test voice on Region A
+
+Test voice on Region B
+
+Test voice on Region C
+
+Test voice on Region D
+
+Test voice while moving between Regions A -> B -> C -> D -> A ->
+
+Status: No problems detected.
+
 ---
 
 ## os-webrtc-janus Delta Summary vs upstream opensim/opensim
