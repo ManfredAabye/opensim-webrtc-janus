@@ -606,7 +606,16 @@ namespace WebRtcVoice
                                         }
                                         else
                                         {
-                                            m_log.ErrorFormat("{0} EventLongPoll: event no outstanding request {1}", LogHeader, resp.ToString());
+                                            // Janus often pushes plugin events without a transaction id (normal async flow).
+                                            // Keep unknown transaction ids visible, but do not treat missing transaction ids as errors.
+                                            if (String.IsNullOrEmpty(resp.TransactionId))
+                                            {
+                                                if (_MessageDetails) m_log.DebugFormat("{0} EventLongPoll: async event with no transaction {1}", LogHeader, resp.ToString());
+                                            }
+                                            else
+                                            {
+                                                m_log.WarnFormat("{0} EventLongPoll: event with unknown transaction {1}", LogHeader, resp.ToString());
+                                            }
                                             OnEvent?.Invoke(eventResp);
                                         }
                                         break;
