@@ -12,6 +12,10 @@ As of March 7, 2026 at 10:24 PM, no more crashes or errors have been detected.
 
 ---
 
+⚠️ This overview is AI-generated because I was unable to document the 230 working hours I invested.
+
+---
+
 ## os-webrtc-janus Delta Summary vs upstream opensim/opensim
 
 ## Scope
