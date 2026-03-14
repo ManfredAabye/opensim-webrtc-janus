@@ -26,6 +26,8 @@ No more misleading "event no outstanding request error" during normal "Janus rec
 
 Audio/signaling behavior remains functionally unchanged (verified).
 
+.
+
 Debug output reduced (JSON Reduced to Debug)
 
     Debug configuration "JanusDebug = true" for debug output.
